@@ -1,0 +1,6 @@
+@ModernBetaPositioningSystem_HostAddress = http://localhost:5205
+
+GET {{ModernBetaPositioningSystem_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
