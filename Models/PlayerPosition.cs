@@ -49,7 +49,7 @@
         public PlayerPosition(string username, Position position)
         {
             Username = username;
-            
+
             UpdatePosition(position);
         }
         public void UpdatePosition(Position newPosition)

@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Route = ModernBetaPositioningSystem.Models.Route;
 
 namespace ModernBetaPositioningSystem.Services
 {
@@ -6,60 +7,55 @@ namespace ModernBetaPositioningSystem.Services
     {
         private readonly PositionService _positionService;
         private readonly FeatureService _featureService;
-
-        public TrackingService()
+        private readonly RouteService _routeService;
+        public TrackingService(string positionServiceUrl, string positionServiceApiKey)
         {
-            _positionService = new PositionService("https://api.modernbeta.org/api/v1/worlds/world/positions", "16_O4PQQ0LBsEf9JmVs_tnjeWsYDAhzQCrf55MKTYfU");
+            _positionService = new PositionService(positionServiceUrl, positionServiceApiKey);
             _featureService = new FeatureService();
-            _featureService.AddFeature(new Models.Feature
+            _routeService = new RouteService();
+
+            RegisterRouteEvents();
+        }
+        private void RegisterRouteEvents()
+        {
+            _routeService.OnApproach += (sender, e) =>
             {
-                Id = Guid.NewGuid(),
-                Name = "A4",
-                StartPosition = new Position { X = -376, Y = 47, Z = -2632 },
-                EndPosition = new Position { X = -368, Y = 45, Z = -2603 }
-            });
-            _featureService.AddFeature(new Models.Feature
+                if (e.IsInsideApproachingFeature)
+                    Debug.WriteLine($"{e.PlayerPosition.Username}> [THIS IS] {e.ApproachingFeature.Name}");
+            };
+
+            _routeService.OnLeave += (sender, e) =>
             {
-                Id = Guid.NewGuid(),
-                Name = "C3",
-                StartPosition = new Position { X = -595, Y = 49, Z = -2695 },
-                EndPosition = new Position { X = -589, Y = 47, Z = -2675 }
-            });
-            _featureService.AddFeature(new Models.Feature
+                if (e.HeadingTo != null)
+                    Debug.WriteLine($"{e.PlayerPosition.Username}> [NEXT STATION IS] {e.HeadingTo?.Name}");
+            };
+
+            _routeService.OnPlayerRouteAdded += (sender, e) =>
             {
-                Id = Guid.NewGuid(),
-                Name = "C4",
-                StartPosition = new Position { X = -532, Y = 55, Z = -2618 },
-                EndPosition = new Position { X = -495, Y = 53, Z = -2610 }
-            });
-            _featureService.AddFeature(new Models.Feature
+                //if (e.Feature == null && e.PreviousFeature != null)
+                //    Debug.WriteLine($"[NEXT STATION IS] {e.HeadingTo.Name}");
+                Debug.WriteLine($"[PLAYER ROUTE ADDED] {e.PlayerRoute.Username} added to route: {e.PlayerRoute.Route.Name}");
+            };
+
+            _routeService.OnPlayerRouteDisposed += (sender, e) =>
             {
-                Id = Guid.NewGuid(),
-                Name = "C5",
-                StartPosition = new Position { X = -333, Y = 45, Z = -2598 },
-                EndPosition = new Position { X = -355, Y = 43, Z = -2590 }
-            });
-            _featureService.AddFeature(new Models.Feature
+                Debug.WriteLine($"[PLAYER ROUTE DISPOSED] {e.PlayerRoute.Username} removed from route: {e.PlayerRoute.Route.Name}");
+            };
+            _routeService.OnPlayerRouteUpdate += (sender, e) =>
             {
-                Id = Guid.NewGuid(),
-                Name = "C6",
-                StartPosition = new Position { X = -252, Y = 41, Z = -2516 },
-                EndPosition = new Position { X = -283, Y = 39, Z = -2507 }
-            });
-            _featureService.AddFeature(new Models.Feature
+                // Debug.WriteLine($"[PLAYER ROUTE UPDATE] {e.PlayerRoute.Username} Feature:{e.Feature.Name}, IsInside:{e.IsInside}, IsApproaching:{e.IsApproaching}, IsLeaving:{e.IsLeaving}");
+            };
+        }
+        public void RegisterRoutes(List<Route> config)
+        {
+            foreach (var route in config)
             {
-                Id = Guid.NewGuid(),
-                Name = "C7",
-                StartPosition = new Position { X = -216, Y = 56, Z = -2587 },
-                EndPosition = new Position { X = -186, Y = 54, Z = -2597 }
-            });
-            _featureService.AddFeature(new Models.Feature
-            {
-                Id = Guid.NewGuid(),
-                Name = "C8",
-                StartPosition = new Position { X = -104, Y = 58, Z = -2639 },
-                EndPosition = new Position { X = -81, Y = 56, Z = -2583 }
-            });
+                _routeService.AddRoute(route);
+                foreach (var feature in route.Checkpoints)
+                {
+                    _featureService.AddFeature(feature);
+                }
+            }
         }
         public async Task StartTrackingLoop(int intervalInSeconds, CancellationToken cancellationToken)
         {
@@ -70,21 +66,11 @@ namespace ModernBetaPositioningSystem.Services
                     var result = await _positionService.Track();
                     foreach (var player in result)
                     {
+                        var closestFeature = _featureService.GetClosest(player.ActualPosition);
 
-                        if (player.Username == "olek128")
-                        {
-                            var guid = _featureService.GetClosest(player.ActualPosition);
-                            if (guid != null)
-                            {
-                                var isApproaching = _featureService.IsPlayerApprochingFeature(player, guid);
-                                var isInside = _featureService.IsPlayerInFeature(player, guid);
-                                var isleaving = _featureService.IsPlayerLeavingFeature(player, guid);
-                                Debug.WriteLine($"Player: {player.Username}, Closest Feature: {guid.Name}, IsApproaching: {isApproaching}, IsInside: {isInside}, IsLeaving: {isleaving}");
-                            }
-                            else
-                                Debug.WriteLine($"Player: {player.Username}, No feature nearby.");
-                        }
+                        _routeService.DetectActiveRoutes(player, closestFeature);
                     }
+
                 }
                 catch (Exception ex)
                 {

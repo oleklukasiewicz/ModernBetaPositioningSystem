@@ -1,5 +1,4 @@
 ﻿using ModernBetaPositioningSystem.Models;
-using System.Diagnostics;
 
 namespace ModernBetaPositioningSystem.Services
 {
@@ -16,7 +15,6 @@ namespace ModernBetaPositioningSystem.Services
             _apiKey = apiKey;
             _httpClient = httpClient ?? new HttpClient();
         }
-        public List<PlayerPosition> Positions => _trackedPlayers;
         public async Task<List<PlayerPosition>> Track()
         {
             var worldPositions = await _GetPositions();
