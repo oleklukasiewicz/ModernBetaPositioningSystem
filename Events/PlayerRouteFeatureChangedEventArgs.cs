@@ -4,18 +4,12 @@ namespace ModernBetaPositioningSystem.Events
 {
     public class PlayerRouteFeatureChangedEventArgs : EventArgs
     {
-        public PlayerPosition PlayerPosition { get; private set; }
-        public Models.Route Route { get; private set; }
-        public Feature Feature { get; private set; }
+        public PlayerRoute PlayerRoute { get; private set; }
         public Feature PreviousFeature { get; private set; }
-        public Feature HeadingTo { get; private set; }
-        public PlayerRouteFeatureChangedEventArgs(PlayerPosition playerPosition, Models.Route route, Feature feature, Feature previousFeature, Feature headingTo)
+        public PlayerRouteFeatureChangedEventArgs(PlayerRoute playerRoute, Feature previousFeature)
         {
-            PlayerPosition = playerPosition;
-            Route = route;
-            Feature = feature;
+            PlayerRoute = playerRoute;
             PreviousFeature = previousFeature;
-            HeadingTo = headingTo;
         }
     }
 }

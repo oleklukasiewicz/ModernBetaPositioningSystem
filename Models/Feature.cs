@@ -1,135 +1,79 @@
-﻿namespace ModernBetaPositioningSystem.Models
+﻿namespace ModernBetaPositioningSystem.Models;
+
+public class Feature
 {
-    public class Feature
+    private Position _start = null!, _end = null!;
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public long MinX { get; private set; }
+    public long MaxX { get; private set; }
+    public long MinY { get; private set; }
+    public long MaxY { get; private set; }
+    public long MinZ { get; private set; }
+    public long MaxZ { get; private set; }
+    public double CenterX { get; private set; }
+    public double CenterY { get; private set; }
+    public double CenterZ { get; private set; }
+
+    public Position StartPosition { get => _start; set { _start = value; Recalc(); } }
+    public Position EndPosition { get => _end; set { _end = value; Recalc(); } }
+
+    private void Recalc()
     {
-        public Guid Id { get; set; }
-        public string Name { get; set; }
-        public Position StartPosition { get; set; }
-        public Position EndPosition { get; set; }
-
-        public double DistanceFrom(Position position)
-        {
-            long minX = Math.Min(StartPosition.X, EndPosition.X);
-            long maxX = Math.Max(StartPosition.X, EndPosition.X);
-            long minY = Math.Min(StartPosition.Y, EndPosition.Y);
-            long maxY = Math.Max(StartPosition.Y, EndPosition.Y);
-            long minZ = Math.Min(StartPosition.Z, EndPosition.Z);
-            long maxZ = Math.Max(StartPosition.Z, EndPosition.Z);
-
-            double dx = Math.Max(0, Math.Max(minX - position.X, position.X - maxX));
-            double dy = Math.Max(0, Math.Max(minY - position.Y, position.Y - maxY));
-            double dz = Math.Max(0, Math.Max(minZ - position.Z, position.Z - maxZ));
-
-            return Math.Sqrt(dx * dx + dy * dy + dz * dz);
-        }
-        public Position CenterPosition => new Position
-        {
-            X = (StartPosition.X + EndPosition.X) / 2,
-            Y = (StartPosition.Y + EndPosition.Y) / 2,
-            Z = (StartPosition.Z + EndPosition.Z) / 2
-        };
-        public double DistanceSquaredToCenterFrom(Position position)
-        {
-            double dx = position.X - CenterPosition.X;
-            double dy = position.Y - CenterPosition.Y;
-            double dz = position.Z - CenterPosition.Z;
-            return dx * dx + dy * dy + dz * dz;
-        }
-        public void Bounds(long tolX, long tolY, long tolZ, out long minX, out long maxX, out long minY, out long maxY, out long minZ, out long maxZ)
-        {
-            minX = Math.Min(StartPosition.X, EndPosition.X) - tolX;
-            maxX = Math.Max(StartPosition.X, EndPosition.X) + tolX;
-            minY = Math.Min(StartPosition.Y, EndPosition.Y) - tolY;
-            maxY = Math.Max(StartPosition.Y, EndPosition.Y) + tolY;
-            minZ = Math.Min(StartPosition.Z, EndPosition.Z) - tolZ;
-            maxZ = Math.Max(StartPosition.Z, EndPosition.Z) + tolZ;
-        }
-        public int GetDirection(PlayerPosition playerPosition)
-        {
-            if (playerPosition?.ActualPosition == null || playerPosition?.PreviousPosition == null || this == null) return 0;
-            var dir = playerPosition.MovementVector;
-            if (dir.X == 0 && dir.Y == 0 && dir.Z == 0) return 0;
-
-            if (IsLocationInFeature(playerPosition.ActualPosition))
-            {
-                return DistanceSquaredToCenterFrom(playerPosition.ActualPosition)
-                    .CompareTo(DistanceSquaredToCenterFrom(playerPosition.PreviousPosition));
-            }
-
-            if (TryGetRayIntersection(playerPosition.ActualPosition, dir, out double tmin, out double tmax))
-            {
-                if (tmax >= 0 && tmin > 0) return -1;
-                if (tmax < 0) return 1;
-            }
-            return 0;
-        }
-        public bool IsLocationInFeature(Position position)
-        {
-            long tolerance = 2;
-            Bounds(tolerance, tolerance, tolerance, out long minX, out long maxX, out long minY, out long maxY, out long minZ, out long maxZ);
-            return position.X >= minX && position.X <= maxX &&
-                   position.Y >= minY && position.Y <= maxY &&
-                   position.Z >= minZ && position.Z <= maxZ;
-        }
-        private bool TryGetRayIntersection(Position origin, Position dir, out double tmin, out double tmax)
-        {
-            tmin = double.NegativeInfinity;
-            tmax = double.PositiveInfinity;
-
-            long tolerance = 2;
-            Bounds(tolerance, tolerance, tolerance, out long minX, out long maxX, out long minY, out long maxY, out long minZ, out long maxZ);
-
-            if (dir.X != 0)
-            {
-                double tx1 = (minX - origin.X) / (double)dir.X;
-                double tx2 = (maxX - origin.X) / (double)dir.X;
-                tmin = Math.Max(tmin, Math.Min(tx1, tx2));
-                tmax = Math.Min(tmax, Math.Max(tx1, tx2));
-            }
-            else if (origin.X < minX || origin.X > maxX) return false;
-
-            if (dir.Y != 0)
-            {
-                double ty1 = (minY - origin.Y) / (double)dir.Y;
-                double ty2 = (maxY - origin.Y) / (double)dir.Y;
-                tmin = Math.Max(tmin, Math.Min(ty1, ty2));
-                tmax = Math.Min(tmax, Math.Max(ty1, ty2));
-            }
-            else if (origin.Y < minY || origin.Y > maxY) return false;
-
-            if (dir.Z != 0)
-            {
-                double tz1 = (minZ - origin.Z) / (double)dir.Z;
-                double tz2 = (maxZ - origin.Z) / (double)dir.Z;
-                tmin = Math.Max(tmin, Math.Min(tz1, tz2));
-                tmax = Math.Min(tmax, Math.Max(tz1, tz2));
-            }
-            else if (origin.Z < minZ || origin.Z > maxZ) return false;
-
-            return tmax >= tmin;
-        }
-        public bool IsLeaving(PlayerPosition playerPosition) => GetDirection(playerPosition) > 0;
-        public bool IsApproaching(PlayerPosition playerPosition) => GetDirection(playerPosition) < 0;
-        public bool IsHeadingTo(PlayerPosition playerPosition)
-        {
-            if (playerPosition == null || playerPosition.MovementVector == null)
-                return false;
-
-            double dirX = CenterPosition.X - playerPosition.ActualPosition.X;
-            double dirY = CenterPosition.Y - playerPosition.ActualPosition.Y;
-            double dirZ = CenterPosition.Z - playerPosition.ActualPosition.Z;
-
-            double dotProduct = playerPosition.MovementVector.X * dirX + playerPosition.MovementVector.Y * dirY + playerPosition.MovementVector.Z * dirZ;
-
-            return dotProduct > 0;
-        }
-        public bool IsInRange(Position position, Position range)
-        {
-            Bounds(range.X, range.Y, range.Z, out long minX, out long maxX, out long minY, out long maxY, out long minZ, out long maxZ);
-
-            return position.X >= minX && position.X <= maxX &&
-                   position.Y >= minY && position.Y <= maxY &&
-                   position.Z >= minZ && position.Z <= maxZ;
-        }
+        if (_start == null || _end == null) return;
+        (MinX, MaxX) = (Math.Min(_start.X, _end.X), Math.Max(_start.X, _end.X));
+        (MinY, MaxY) = (Math.Min(_start.Y, _end.Y), Math.Max(_start.Y, _end.Y));
+        (MinZ, MaxZ) = (Math.Min(_start.Z, _end.Z), Math.Max(_start.Z, _end.Z));
+        (CenterX, CenterY, CenterZ) = ((MinX + MaxX) / 2.0, (MinY + MaxY) / 2.0, (MinZ + MaxZ) / 2.0);
     }
+
+    public Position CenterPosition => new() { X = (long)CenterX, Y = (long)CenterY, Z = (long)CenterZ };
+
+    public double DistanceFrom(Position p) =>
+        Math.Sqrt(Math.Pow(Math.Max(0, Math.Max(MinX - p.X, p.X - MaxX)), 2) +
+                  Math.Pow(Math.Max(0, Math.Max(MinY - p.Y, p.Y - MaxY)), 2) +
+                  Math.Pow(Math.Max(0, Math.Max(MinZ - p.Z, p.Z - MaxZ)), 2));
+
+    public double DistanceSquaredToCenterFrom(Position p) => Math.Pow(p.X - CenterX, 2) + Math.Pow(p.Y - CenterY, 2) + Math.Pow(p.Z - CenterZ, 2);
+
+    public int GetDirection(PlayerPosition pos)
+    {
+        if (pos?.ActualPosition == null || pos.PreviousPosition == null || pos.MovementVector == null) return 0;
+        var dir = pos.MovementVector;
+        if (dir.X == 0 && dir.Y == 0 && dir.Z == 0) return 0;
+
+        if (IsLocationInFeature(pos.ActualPosition))
+            return DistanceSquaredToCenterFrom(pos.ActualPosition).CompareTo(DistanceSquaredToCenterFrom(pos.PreviousPosition));
+
+        if (TryGetRayIntersection(pos.ActualPosition, dir, out double tmin, out double tmax))
+            return (tmax >= 0 && tmin > 0) ? -1 : (tmax < 0 ? 1 : 0);
+
+        return 0;
+    }
+
+    public bool IsLocationInFeature(Position p) => p.X >= MinX - 2 && p.X <= MaxX + 2 && p.Y >= MinY - 2 && p.Y <= MaxY + 2 && p.Z >= MinZ - 2 && p.Z <= MaxZ + 2;
+
+    private bool TryGetRayIntersection(Position origin, Position dir, out double tmin, out double tmax)
+    {
+        (tmin, tmax) = (double.NegativeInfinity, double.PositiveInfinity);
+        (long minX, long maxX, long minY, long maxY, long minZ, long maxZ) = (MinX - 2, MaxX + 2, MinY - 2, MaxY + 2, MinZ - 2, MaxZ + 2);
+
+        if (dir.X != 0) { double t1 = (minX - origin.X) / (double)dir.X, t2 = (maxX - origin.X) / (double)dir.X; tmin = Math.Max(tmin, Math.Min(t1, t2)); tmax = Math.Min(tmax, Math.Max(t1, t2)); }
+        else if (origin.X < minX || origin.X > maxX) return false;
+
+        if (dir.Y != 0) { double t1 = (minY - origin.Y) / (double)dir.Y, t2 = (maxY - origin.Y) / (double)dir.Y; tmin = Math.Max(tmin, Math.Min(t1, t2)); tmax = Math.Min(tmax, Math.Max(t1, t2)); }
+        else if (origin.Y < minY || origin.Y > maxY) return false;
+
+        if (dir.Z != 0) { double t1 = (minZ - origin.Z) / (double)dir.Z, t2 = (maxZ - origin.Z) / (double)dir.Z; tmin = Math.Max(tmin, Math.Min(t1, t2)); tmax = Math.Min(tmax, Math.Max(t1, t2)); }
+        else if (origin.Z < minZ || origin.Z > maxZ) return false;
+
+        return tmax >= tmin;
+    }
+
+    public bool IsLeaving(PlayerPosition pos) => GetDirection(pos) > 0;
+    public bool IsApproaching(PlayerPosition pos) => GetDirection(pos) < 0;
+    public bool IsHeadingTo(PlayerPosition pos) => pos?.ActualPosition != null && pos.MovementVector != null &&
+        ((CenterX - pos.ActualPosition.X) * pos.MovementVector.X + (CenterY - pos.ActualPosition.Y) * pos.MovementVector.Y + (CenterZ - pos.ActualPosition.Z) * pos.MovementVector.Z) > 0;
+
+    public bool IsInRange(Position p, Position r) => p.X >= MinX - r.X && p.X <= MaxX + r.X && p.Y >= MinY - r.Y && p.Y <= MaxY + r.Y && p.Z >= MinZ - r.Z && p.Z <= MaxZ + r.Z;
 }

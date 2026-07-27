@@ -1,4 +1,6 @@
-﻿using ModernBetaPositioningSystem.Models;
+﻿using Microsoft.AspNetCore.Http.HttpResults;
+using ModernBetaPositioningSystem.Events;
+using ModernBetaPositioningSystem.Models;
 
 namespace ModernBetaPositioningSystem.Services
 {
@@ -9,6 +11,11 @@ namespace ModernBetaPositioningSystem.Services
         private HttpClient _httpClient;
 
         public List<PlayerPosition> _trackedPlayers = new List<PlayerPosition>();
+
+        public event EventHandler<PlayerPositionsFetchedEventArgs>? OnPositionsFetched;
+        public event EventHandler<PlayerPositionUpdatedEventArgs>? OnPlayerPositionUpdated;
+        public event EventHandler<PlayerPositionAddedEventArgs>? OnPlayerPositionAdded;
+        public event EventHandler<PlayerPositionDisposedEventArgs>? OnPlayerPositionDisposed;
         public PositionService(string endpointURL, string apiKey, HttpClient httpClient = null)
         {
             _endpointURL = endpointURL;
@@ -24,11 +31,16 @@ namespace ModernBetaPositioningSystem.Services
                 var existingPlayer = _trackedPlayers.FirstOrDefault(p => p.Username == player.Username);
                 if (existingPlayer != null)
                 {
-                    existingPlayer.UpdatePosition(player);
+                    var previousPosition = existingPlayer;
+                    var updatedPlayer = existingPlayer.UpdatePosition(player);
+                    OnPlayerPositionUpdated?.Invoke(this, new PlayerPositionUpdatedEventArgs(updatedPlayer, previousPosition));
                 }
                 else
                 {
-                    _trackedPlayers.Add(new PlayerPosition(player.Username, player));
+                    var newPlayer = new PlayerPosition(player.Username, player);
+                    _trackedPlayers.Add(newPlayer);
+                    OnPlayerPositionAdded?.Invoke(this, new PlayerPositionAddedEventArgs(newPlayer));
+                    OnPlayerPositionUpdated?.Invoke(this, new PlayerPositionUpdatedEventArgs(newPlayer, null));
                 }
             }
             //untracking
@@ -39,8 +51,12 @@ namespace ModernBetaPositioningSystem.Services
                 {
                     trackedPlayer.UnTrack();
                     _trackedPlayers.Remove(trackedPlayer);
+                    OnPlayerPositionDisposed?.Invoke(this, new PlayerPositionDisposedEventArgs(trackedPlayer));
                 }
             }
+
+            OnPositionsFetched?.Invoke(this, new PlayerPositionsFetchedEventArgs(_trackedPlayers));
+
             return _trackedPlayers;
         }
         private async Task<WorldPositions> _GetPositions()
@@ -55,6 +71,13 @@ namespace ModernBetaPositioningSystem.Services
 
             return worldPositions;
         }
-
+        public async Task StartTrackingLoop(CancellationToken cancellationToken, int intervalInSeconds = 1)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var results = await Track();
+                await Task.Delay(TimeSpan.FromSeconds(intervalInSeconds), cancellationToken);
+            }
+        }
     }
 }

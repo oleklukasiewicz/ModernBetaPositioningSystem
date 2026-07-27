@@ -52,7 +52,7 @@
 
             UpdatePosition(position);
         }
-        public void UpdatePosition(Position newPosition)
+        public PlayerPosition UpdatePosition(Position newPosition)
         {
             PreviousPosition = ActualPosition;
             ActualPosition = newPosition;
@@ -61,6 +61,7 @@
                 ActualPosition.Time = DateTime.Now;
 
             IsTracked = true;
+            return this;
         }
         public void UnTrack()
         {
