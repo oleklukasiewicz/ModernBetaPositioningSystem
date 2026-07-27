@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Http.HttpResults;
 using ModernBetaPositioningSystem.Events;
 using ModernBetaPositioningSystem.Models;
+using System.Collections.Concurrent;
 
 namespace ModernBetaPositioningSystem.Services
 {
@@ -10,7 +11,7 @@ namespace ModernBetaPositioningSystem.Services
         private readonly string _apiKey;
         private HttpClient _httpClient;
 
-        public List<PlayerPosition> _trackedPlayers = new List<PlayerPosition>();
+        private readonly ConcurrentDictionary<string, PlayerPosition> _trackedPlayers = new();
 
         public event EventHandler<PlayerPositionsFetchedEventArgs>? OnPositionsFetched;
         public event EventHandler<PlayerPositionUpdatedEventArgs>? OnPlayerPositionUpdated;
@@ -25,39 +26,51 @@ namespace ModernBetaPositioningSystem.Services
         public async Task<List<PlayerPosition>> Track()
         {
             var worldPositions = await _GetPositions();
-            //new + update
-            foreach (var player in worldPositions.Players)
+            if (worldPositions?.Players == null) return _trackedPlayers.Values.ToList();
+            var currentServerUsernames = new HashSet<string>(
+                worldPositions.Players.Select(p => p.Username),
+                StringComparer.OrdinalIgnoreCase
+            );
+
+            await Parallel.ForEachAsync(worldPositions.Players, (player, ct) =>
             {
-                var existingPlayer = _trackedPlayers.FirstOrDefault(p => p.Username == player.Username);
-                if (existingPlayer != null)
-                {
-                    var previousPosition = existingPlayer;
-                    var updatedPlayer = existingPlayer.UpdatePosition(player);
-                    OnPlayerPositionUpdated?.Invoke(this, new PlayerPositionUpdatedEventArgs(updatedPlayer, previousPosition));
-                }
-                else
-                {
-                    var newPlayer = new PlayerPosition(player.Username, player);
-                    _trackedPlayers.Add(newPlayer);
-                    OnPlayerPositionAdded?.Invoke(this, new PlayerPositionAddedEventArgs(newPlayer));
-                    OnPlayerPositionUpdated?.Invoke(this, new PlayerPositionUpdatedEventArgs(newPlayer, null));
-                }
-            }
-            //untracking
-            for (int i = 0; i < _trackedPlayers.Count; i++)
+                _trackedPlayers.AddOrUpdate(
+                    player.Username,
+                    key =>
+                    {
+                        var newPlayer = new PlayerPosition(key, player);
+                        OnPlayerPositionAdded?.Invoke(this, new PlayerPositionAddedEventArgs(newPlayer));
+                        OnPlayerPositionUpdated?.Invoke(this, new PlayerPositionUpdatedEventArgs(newPlayer, null));
+                        return newPlayer;
+                    },
+                    (key, existingPlayer) =>
+                    {
+                        var previousPosition = existingPlayer;
+                        var updatedPlayer = existingPlayer.UpdatePosition(player);
+                        OnPlayerPositionUpdated?.Invoke(this, new PlayerPositionUpdatedEventArgs(updatedPlayer, previousPosition));
+                        return updatedPlayer;
+                    }
+                );
+
+                return ValueTask.CompletedTask;
+            });
+
+            foreach (var (username, trackedPlayer) in _trackedPlayers)
             {
-                var trackedPlayer = _trackedPlayers[i];
-                if (!worldPositions.Players.Any(p => p.Username == trackedPlayer.Username))
+                if (!currentServerUsernames.Contains(username))
                 {
-                    trackedPlayer.UnTrack();
-                    _trackedPlayers.Remove(trackedPlayer);
-                    OnPlayerPositionDisposed?.Invoke(this, new PlayerPositionDisposedEventArgs(trackedPlayer));
+                    if (_trackedPlayers.TryRemove(username, out var removedPlayer))
+                    {
+                        removedPlayer.UnTrack();
+                        OnPlayerPositionDisposed?.Invoke(this, new PlayerPositionDisposedEventArgs(removedPlayer));
+                    }
                 }
             }
 
-            OnPositionsFetched?.Invoke(this, new PlayerPositionsFetchedEventArgs(_trackedPlayers));
+            var resultList = _trackedPlayers.Values.ToList();
+            OnPositionsFetched?.Invoke(this, new PlayerPositionsFetchedEventArgs(resultList));
 
-            return _trackedPlayers;
+            return resultList;
         }
         private async Task<WorldPositions> _GetPositions()
         {

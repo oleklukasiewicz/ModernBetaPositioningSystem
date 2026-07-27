@@ -14,9 +14,9 @@ public class RouteService
     private readonly Dictionary<Guid, Route> _routes = new();
     private readonly Dictionary<(string, Guid), PlayerRoute> _playerRoutes = new();
 
-    public RouteService(Position? rangeThreshold = null, int gracePeriodSeconds = 8, double maxAllowedDistanceFromRoute = 24.0)
+    public RouteService(Position? rangeThreshold = null, int gracePeriodSeconds = 8, double maxAllowedDistanceFromRoute = 32.0)
     {
-        _rangeThreshold = rangeThreshold ?? new Position(24, 0, 24);
+        _rangeThreshold = rangeThreshold ?? new Position(32 , 0, 32);
         _graceSec = gracePeriodSeconds;
         _maxDist = maxAllowedDistanceFromRoute;
     }

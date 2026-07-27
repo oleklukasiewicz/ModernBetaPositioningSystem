@@ -18,6 +18,7 @@ public class Feature
     public Position StartPosition { get => _start; set { _start = value; Recalc(); } }
     public Position EndPosition { get => _end; set { _end = value; Recalc(); } }
 
+    public List<string> Tags { get; set; } = new List<string>();
     private void Recalc()
     {
         if (_start == null || _end == null) return;
