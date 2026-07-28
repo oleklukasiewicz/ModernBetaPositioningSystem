@@ -4,7 +4,6 @@ namespace ModernBetaPositioningSystem.Hubs;
 
 public class RouteHub : Hub
 {
-    // Metoda wywoływana z frontendu, przypisuje połączenie do grupy gracza
     public async Task TrackUser(string username)
     {
         if (!string.IsNullOrWhiteSpace(username))

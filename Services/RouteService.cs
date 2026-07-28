@@ -16,7 +16,7 @@ public class RouteService
 
     public RouteService(Position? rangeThreshold = null, int gracePeriodSeconds = 8, double maxAllowedDistanceFromRoute = 32.0)
     {
-        _rangeThreshold = rangeThreshold ?? new Position(32 , 0, 32);
+        _rangeThreshold = rangeThreshold ?? new Position(32, 0, 32);
         _graceSec = gracePeriodSeconds;
         _maxDist = maxAllowedDistanceFromRoute;
     }
@@ -119,8 +119,12 @@ public class RouteService
         var now = DateTime.Now;
         double? closestDist = closest?.DistanceFrom(pos.ActualPosition);
 
-        foreach (var pr in _playerRoutes.Values)
+        var values = _playerRoutes.Values.ToList();
+        for (var i = 0; i < values.Count; i++)
         {
+            var pr = values[i];
+            if (pr == null)
+                continue;
             if (pr.Username != pos.Username) continue;
             double dist = pr.CurrentFeature?.DistanceFrom(pos.ActualPosition) ?? pr.HeadingTo?.DistanceFrom(pos.ActualPosition) ?? closestDist ?? double.MaxValue;
 

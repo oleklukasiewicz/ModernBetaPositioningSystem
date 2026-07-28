@@ -63,12 +63,7 @@ routeService.OnApproach += async (sender, e) =>
         Debug.WriteLine($"{e.PlayerRoute.Username}> [THIS IS] {e.ApproachingFeature.Name}");
 
         // Wysyłamy wiadomość TYLKO do osób śledzących tego użytkownika
-        await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnStationArrived", new
-        {
-            Username = e.PlayerRoute.Username,
-            StationName = e.ApproachingFeature.Name,
-            AudioFile = e.ApproachingFeature.Name.ToLower().Replace(" ", "_") + ".mp3"
-        });
+        await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnStation", e);
     }
 };
 
@@ -79,25 +74,20 @@ routeService.OnLeave += async (sender, e) =>
     {
         Debug.WriteLine($"{e.PlayerRoute.Username}> [NEXT STATION IS] {e.PlayerRoute.HeadingTo?.Name}");
 
-        await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnNextStationAnnounced", new
-        {
-            Username = e.PlayerRoute.Username,
-            NextStationName = e.PlayerRoute.HeadingTo?.Name,
-            AudioFile = e.PlayerRoute.HeadingTo?.Name.ToLower().Replace(" ", "_") + ".mp3"
-        });
+        await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnNextStation", e);
     }
 };
 
 routeService.OnPlayerRouteAdded += async (sender, e) =>
 {
     Debug.WriteLine($"[PLAYER ROUTE ADDED] {e.PlayerRoute.Username} added to route: {e.PlayerRoute.Route.Name}");
-    await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnRouteAdded", new { Username = e.PlayerRoute.Username, RouteName = e.PlayerRoute.Route.Name });
+    await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnRouteJoin", e);
 };
 
 routeService.OnPlayerRouteDisposed += async (sender, e) =>
 {
     Debug.WriteLine($"[PLAYER ROUTE DISPOSED] {e.PlayerRoute.Username} removed from route: {e.PlayerRoute.Route.Name}");
-    await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnRouteDisposed", new { Username = e.PlayerRoute.Username, RouteName = e.PlayerRoute.Route.Name });
+    await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnRouteLeave", e);
 };
 
 foreach (var route in routes)
