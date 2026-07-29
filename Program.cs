@@ -58,36 +58,44 @@ positionService.OnPlayerPositionUpdated += (sender, e) =>
 // Zdarzenie: Wjazd na stację
 routeService.OnApproach += async (sender, e) =>
 {
+    var data = e;
+    data.PlayerRoute.Route.Checkpoints = data.PlayerRoute.Route.Checkpoints.Where(c => c.IsInvisible != true).ToList();
     if (e.IsInsideApproachingFeature)
     {
-        Debug.WriteLine($"{e.PlayerRoute.Username}> [THIS IS] {e.ApproachingFeature.Name}");
+        Debug.WriteLine($"{e.PlayerRoute.Username}> [THIS IS] {data.ApproachingFeature.Name}");
 
         // Wysyłamy wiadomość TYLKO do osób śledzących tego użytkownika
-        await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnStation", e);
+        await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnStation", data);
     }
 };
 
 // Zdarzenie: Zapowiedź następnej stacji
 routeService.OnLeave += async (sender, e) =>
 {
+    var data = e;
+    data.PlayerRoute.Route.Checkpoints = data.PlayerRoute.Route.Checkpoints.Where(c => c.IsInvisible != true).ToList();
     if (e.PlayerRoute.HeadingTo != null)
     {
-        Debug.WriteLine($"{e.PlayerRoute.Username}> [NEXT STATION IS] {e.PlayerRoute.HeadingTo?.Name}");
+        Debug.WriteLine($"{e.PlayerRoute.Username}> [NEXT STATION IS] {data.PlayerRoute.HeadingTo?.Name}");
 
-        await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnNextStation", e);
+        await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnNextStation", data);
     }
 };
 
 routeService.OnPlayerRouteAdded += async (sender, e) =>
 {
-    Debug.WriteLine($"[PLAYER ROUTE ADDED] {e.PlayerRoute.Username} added to route: {e.PlayerRoute.Route.Name}");
-    await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnRouteJoin", e);
+    var data = e;
+    data.PlayerRoute.Route.Checkpoints = data.PlayerRoute.Route.Checkpoints.Where(c => c.IsInvisible != true).ToList();
+    Debug.WriteLine($"[PLAYER ROUTE ADDED] {e.PlayerRoute.Username} added to route: {data.PlayerRoute.Route.Name}");
+    await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnRouteJoin", data);
 };
 
 routeService.OnPlayerRouteDisposed += async (sender, e) =>
 {
-    Debug.WriteLine($"[PLAYER ROUTE DISPOSED] {e.PlayerRoute.Username} removed from route: {e.PlayerRoute.Route.Name}");
-    await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnRouteLeave", e);
+    var data = e;
+    data.PlayerRoute.Route.Checkpoints = data.PlayerRoute.Route.Checkpoints.Where(c => c.IsInvisible != true).ToList();
+    Debug.WriteLine($"[PLAYER ROUTE DISPOSED] {e.PlayerRoute.Username} removed from route: {data.PlayerRoute.Route.Name}");
+    await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnRouteLeave", data);
 };
 
 foreach (var route in routes)

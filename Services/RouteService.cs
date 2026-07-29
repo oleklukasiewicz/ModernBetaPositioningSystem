@@ -70,11 +70,15 @@ public class RouteService
 
     public void DetectCheckpoint(PlayerPosition pos, Feature? closest, PlayerRoute pr)
     {
+        var prCheckpoints = pr.Route.Checkpoints.Where(f => f.IsInvisible != true).ToList();
         if (closest == null || !closest.IsInRange(pos.ActualPosition, _rangeThreshold)) return;
-        int idx = pr.Route.Checkpoints.FindIndex(f => f.Id == closest.Id);
+        if (closest.IsInvisible == true)
+            return;
+        int idx = prCheckpoints.FindIndex(f => f.Id == closest.Id);
         if (idx == -1 || (pr.Route.IsRailway && !pos.IsInMinecart)) return;
 
         var (oldCurrent, oldHeading) = (pr.CurrentFeature, pr.HeadingTo);
+
         bool inLoc = closest.IsLocationInFeature(pos.ActualPosition);
         bool appr = closest.IsApproaching(pos), leav = closest.IsLeaving(pos);
 
@@ -86,7 +90,7 @@ public class RouteService
             else if (leav && pr.CurrentFeature?.Id == closest.Id) pr.CurrentFeature = null;
         }
 
-        var pts = pr.Route.Checkpoints;
+        var pts = prCheckpoints;
         var next = idx + 1 < pts.Count ? pts[idx + 1] : null;
         var prev = idx - 1 >= 0 ? pts[idx - 1] : null;
 
