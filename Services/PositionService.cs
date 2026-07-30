@@ -26,6 +26,9 @@ namespace ModernBetaPositioningSystem.Services
         public async Task<List<PlayerPosition>> Track()
         {
             var worldPositions = await _GetPositions();
+            if (worldPositions == null)
+                return _trackedPlayers.Values.ToList();
+
             if (worldPositions?.Players == null) return _trackedPlayers.Values.ToList();
             var currentServerUsernames = new HashSet<string>(
                 worldPositions.Players.Select(p => p.Username),
@@ -74,15 +77,24 @@ namespace ModernBetaPositioningSystem.Services
         }
         private async Task<WorldPositions> _GetPositions()
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, _endpointURL);
-            request.Headers.Add("X-API-Key", _apiKey);
+            try
+            {
+                var request = new HttpRequestMessage(HttpMethod.Get, _endpointURL);
+                request.Headers.Add("X-API-Key", _apiKey);
 
-            var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+                var response = await _httpClient.SendAsync(request);
+                response.EnsureSuccessStatusCode();
 
-            var worldPositions = await response.Content.ReadFromJsonAsync<WorldPositions>();
+                var worldPositions = await response.Content.ReadFromJsonAsync<WorldPositions>();
 
-            return worldPositions;
+                return worldPositions;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error fetching positions: {ex.Message}");
+                throw;
+            }
+            return null;
         }
         public async Task StartTrackingLoop(CancellationToken cancellationToken, int intervalInSeconds = 1)
         {

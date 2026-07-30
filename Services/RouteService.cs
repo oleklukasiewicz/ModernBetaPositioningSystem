@@ -123,7 +123,11 @@ public class RouteService
         var now = DateTime.Now;
         double? closestDist = closest?.DistanceFrom(pos.ActualPosition);
 
-        var values = _playerRoutes.Values.ToList();
+        List<PlayerRoute> values = new List<PlayerRoute>();
+        lock (_playerRoutes)
+        {
+            values = _playerRoutes.Values.ToList();
+        }
         for (var i = 0; i < values.Count; i++)
         {
             var pr = values[i];

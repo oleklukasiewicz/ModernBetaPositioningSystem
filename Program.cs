@@ -97,6 +97,10 @@ routeService.OnPlayerRouteDisposed += async (sender, e) =>
     Debug.WriteLine($"[PLAYER ROUTE DISPOSED] {e.PlayerRoute.Username} removed from route: {data.PlayerRoute.Route.Name}");
     await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnRouteLeave", data);
 };
+positionService.OnPlayerPositionUpdated += async (sender, e) =>
+{
+    await hubContext.Clients.Group(e.PlayerPosition.Username).SendAsync("OnPositionUpdate", e);
+};
 
 foreach (var route in routes)
 {
