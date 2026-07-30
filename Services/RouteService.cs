@@ -23,7 +23,7 @@ public class RouteService
     public event EventHandler<PlayerRouteDisposedEventArgs>? OnPlayerRouteDisposed;
     public event EventHandler<PlayerRouteUpdateEventArgs>? OnPlayerRouteUpdate;
 
-    public RouteService(Position? rangeThreshold = null, int gracePeriodSeconds = 8, double maxAllowedDistanceFromRoute = 32.0)
+    public RouteService(Position? rangeThreshold = null, int gracePeriodSeconds = 12, double maxAllowedDistanceFromRoute = 32.0)
     {
         _rangeThreshold = rangeThreshold ?? new Position(32, 0, 32);
         _graceSec = gracePeriodSeconds;
