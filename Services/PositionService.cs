@@ -1,108 +1,92 @@
-﻿using Microsoft.AspNetCore.Http.HttpResults;
+﻿using System.Collections.Concurrent;
+using System.Net.Http.Json;
 using ModernBetaPositioningSystem.Events;
 using ModernBetaPositioningSystem.Models;
-using System.Collections.Concurrent;
 
-namespace ModernBetaPositioningSystem.Services
+namespace ModernBetaPositioningSystem.Services;
+
+public class PositionService
 {
-    public class PositionService
+    private readonly string _endpointUrl;
+    private readonly HttpClient _httpClient;
+    private readonly ConcurrentDictionary<string, PlayerPosition> _trackedPlayers = new(StringComparer.OrdinalIgnoreCase);
+
+    public event EventHandler<PlayerPositionsFetchedEventArgs>? OnPositionsFetched;
+    public event EventHandler<PlayerPositionUpdatedEventArgs>? OnPlayerPositionUpdated;
+    public event EventHandler<PlayerPositionAddedEventArgs>? OnPlayerPositionAdded;
+    public event EventHandler<PlayerPositionDisposedEventArgs>? OnPlayerPositionDisposed;
+
+    public PositionService(string endpointUrl, string apiKey, HttpClient? httpClient = null)
     {
-        private readonly string _endpointURL;
-        private readonly string _apiKey;
-        private HttpClient _httpClient;
+        _endpointUrl = endpointUrl;
+        _httpClient = httpClient ?? new HttpClient();
+        if (!_httpClient.DefaultRequestHeaders.Contains("X-API-Key"))
+            _httpClient.DefaultRequestHeaders.Add("X-API-Key", apiKey);
+    }
 
-        private readonly ConcurrentDictionary<string, PlayerPosition> _trackedPlayers = new();
+    public async Task<List<PlayerPosition>> Track()
+    {
+        var worldPositions = await FetchPositionsAsync();
+        if (worldPositions?.Players == null)
+            return _trackedPlayers.Values.ToList();
 
-        public event EventHandler<PlayerPositionsFetchedEventArgs>? OnPositionsFetched;
-        public event EventHandler<PlayerPositionUpdatedEventArgs>? OnPlayerPositionUpdated;
-        public event EventHandler<PlayerPositionAddedEventArgs>? OnPlayerPositionAdded;
-        public event EventHandler<PlayerPositionDisposedEventArgs>? OnPlayerPositionDisposed;
-        public PositionService(string endpointURL, string apiKey, HttpClient httpClient = null)
+        var activeUsernames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var player in worldPositions.Players)
         {
-            _endpointURL = endpointURL;
-            _apiKey = apiKey;
-            _httpClient = httpClient ?? new HttpClient();
-        }
-        public async Task<List<PlayerPosition>> Track()
-        {
-            var worldPositions = await _GetPositions();
-            if (worldPositions == null)
-                return _trackedPlayers.Values.ToList();
+            activeUsernames.Add(player.Username);
 
-            if (worldPositions?.Players == null) return _trackedPlayers.Values.ToList();
-            var currentServerUsernames = new HashSet<string>(
-                worldPositions.Players.Select(p => p.Username),
-                StringComparer.OrdinalIgnoreCase
-            );
-
-            await Parallel.ForEachAsync(worldPositions.Players, (player, ct) =>
-            {
-                _trackedPlayers.AddOrUpdate(
-                    player.Username,
-                    key =>
-                    {
-                        var newPlayer = new PlayerPosition(key, player);
-                        OnPlayerPositionAdded?.Invoke(this, new PlayerPositionAddedEventArgs(newPlayer));
-                        OnPlayerPositionUpdated?.Invoke(this, new PlayerPositionUpdatedEventArgs(newPlayer, null));
-                        return newPlayer;
-                    },
-                    (key, existingPlayer) =>
-                    {
-                        var previousPosition = existingPlayer;
-                        var updatedPlayer = existingPlayer.UpdatePosition(player);
-                        OnPlayerPositionUpdated?.Invoke(this, new PlayerPositionUpdatedEventArgs(updatedPlayer, previousPosition));
-                        return updatedPlayer;
-                    }
-                );
-
-                return ValueTask.CompletedTask;
-            });
-
-            foreach (var (username, trackedPlayer) in _trackedPlayers)
-            {
-                if (!currentServerUsernames.Contains(username))
+            _trackedPlayers.AddOrUpdate(
+                player.Username,
+                key =>
                 {
-                    if (_trackedPlayers.TryRemove(username, out var removedPlayer))
-                    {
-                        removedPlayer.UnTrack();
-                        OnPlayerPositionDisposed?.Invoke(this, new PlayerPositionDisposedEventArgs(removedPlayer));
-                    }
-                }
-            }
-
-            var resultList = _trackedPlayers.Values.ToList();
-            OnPositionsFetched?.Invoke(this, new PlayerPositionsFetchedEventArgs(resultList));
-
-            return resultList;
+                    var newPlayer = new PlayerPosition(key, player);
+                    OnPlayerPositionAdded?.Invoke(this, new PlayerPositionAddedEventArgs(newPlayer));
+                    OnPlayerPositionUpdated?.Invoke(this, new PlayerPositionUpdatedEventArgs(newPlayer, null));
+                    return newPlayer;
+                },
+                (_, existing) =>
+                {
+                    var prev = existing;
+                    var updated = existing.UpdatePosition(player);
+                    OnPlayerPositionUpdated?.Invoke(this, new PlayerPositionUpdatedEventArgs(updated, prev));
+                    return updated;
+                });
         }
-        private async Task<WorldPositions> _GetPositions()
+
+        foreach (var key in _trackedPlayers.Keys)
         {
-            try
+            if (!activeUsernames.Contains(key) && _trackedPlayers.TryRemove(key, out var removed))
             {
-                var request = new HttpRequestMessage(HttpMethod.Get, _endpointURL);
-                request.Headers.Add("X-API-Key", _apiKey);
-
-                var response = await _httpClient.SendAsync(request);
-                response.EnsureSuccessStatusCode();
-
-                var worldPositions = await response.Content.ReadFromJsonAsync<WorldPositions>();
-
-                return worldPositions;
+                removed.UnTrack();
+                OnPlayerPositionDisposed?.Invoke(this, new PlayerPositionDisposedEventArgs(removed));
             }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Error fetching positions: {ex.Message}");
-                throw;
-            }
+        }
+
+        var resultList = _trackedPlayers.Values.ToList();
+        OnPositionsFetched?.Invoke(this, new PlayerPositionsFetchedEventArgs(resultList));
+        return resultList;
+    }
+
+    private async Task<WorldPositions?> FetchPositionsAsync()
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<WorldPositions>(_endpointUrl);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error fetching positions: {ex.Message}");
             return null;
         }
-        public async Task StartTrackingLoop(CancellationToken cancellationToken, int intervalInSeconds = 1)
+    }
+
+    public async Task StartTrackingLoop(CancellationToken ct, int intervalInSeconds = 1)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(intervalInSeconds));
+        while (!ct.IsCancellationRequested && await timer.WaitForNextTickAsync(ct))
         {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                var results = await Track();
-                await Task.Delay(TimeSpan.FromSeconds(intervalInSeconds), cancellationToken);
-            }
+            await Track();
         }
     }
 }

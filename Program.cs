@@ -49,13 +49,13 @@ var routeService = new RouteService();
 
 var hubContext = app.Services.GetRequiredService<IHubContext<RouteHub>>();
 
-positionService.OnPlayerPositionUpdated += (sender, e) =>
+positionService.OnPlayerPositionUpdated += async (sender, e) =>
 {
     var closestFeature = routeService.GetClosestFeature(e.PlayerPosition.ActualPosition);
     routeService.DetectActiveRoutes(e.PlayerPosition, closestFeature);
+    await hubContext.Clients.Group(e.PlayerPosition.Username).SendAsync("OnPositionUpdate", e);
 };
 
-// Zdarzenie: Wjazd na stację
 routeService.OnApproach += async (sender, e) =>
 {
     var data = e;
@@ -63,13 +63,9 @@ routeService.OnApproach += async (sender, e) =>
     if (e.IsInsideApproachingFeature)
     {
         Debug.WriteLine($"{e.PlayerRoute.Username}> [THIS IS] {data.ApproachingFeature.Name}");
-
-        // Wysyłamy wiadomość TYLKO do osób śledzących tego użytkownika
         await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnStation", data);
     }
 };
-
-// Zdarzenie: Zapowiedź następnej stacji
 routeService.OnLeave += async (sender, e) =>
 {
     var data = e;
@@ -97,15 +93,9 @@ routeService.OnPlayerRouteDisposed += async (sender, e) =>
     Debug.WriteLine($"[PLAYER ROUTE DISPOSED] {e.PlayerRoute.Username} removed from route: {data.PlayerRoute.Route.Name}");
     await hubContext.Clients.Group(e.PlayerRoute.Username).SendAsync("OnRouteLeave", data);
 };
-positionService.OnPlayerPositionUpdated += async (sender, e) =>
-{
-    await hubContext.Clients.Group(e.PlayerPosition.Username).SendAsync("OnPositionUpdate", e);
-};
 
 foreach (var route in routes)
-{
     routeService.AddRoute(route);
-}
 
 _ = positionService.StartTrackingLoop(app.Lifetime.ApplicationStopping);
 

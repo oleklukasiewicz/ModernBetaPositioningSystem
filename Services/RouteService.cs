@@ -1,4 +1,5 @@
-﻿using ModernBetaPositioningSystem.Events;
+﻿using System.Collections.Concurrent;
+using ModernBetaPositioningSystem.Events;
 using ModernBetaPositioningSystem.Models;
 using Route = ModernBetaPositioningSystem.Models.Route;
 
@@ -10,16 +11,9 @@ public class RouteService
     private readonly int _graceSec;
     private readonly Position _rangeThreshold;
 
-    private Dictionary<Guid, Feature> _features = new();
-    private readonly Dictionary<Guid, Route> _routes = new();
-    private readonly Dictionary<(string, Guid), PlayerRoute> _playerRoutes = new();
-
-    public RouteService(Position? rangeThreshold = null, int gracePeriodSeconds = 8, double maxAllowedDistanceFromRoute = 32.0)
-    {
-        _rangeThreshold = rangeThreshold ?? new Position(32, 0, 32);
-        _graceSec = gracePeriodSeconds;
-        _maxDist = maxAllowedDistanceFromRoute;
-    }
+    private readonly ConcurrentDictionary<Guid, Feature> _features = new();
+    private readonly ConcurrentDictionary<Guid, Route> _routes = new();
+    private readonly ConcurrentDictionary<(string Username, Guid RouteId), PlayerRoute> _playerRoutes = new();
 
     public event EventHandler<PlayerRouteFeatureApproachingEventArgs>? OnApproach;
     public event EventHandler<PlayerRouteFeatureLeavingEventArgs>? OnLeave;
@@ -29,32 +23,37 @@ public class RouteService
     public event EventHandler<PlayerRouteDisposedEventArgs>? OnPlayerRouteDisposed;
     public event EventHandler<PlayerRouteUpdateEventArgs>? OnPlayerRouteUpdate;
 
+    public RouteService(Position? rangeThreshold = null, int gracePeriodSeconds = 8, double maxAllowedDistanceFromRoute = 32.0)
+    {
+        _rangeThreshold = rangeThreshold ?? new Position(32, 0, 32);
+        _graceSec = gracePeriodSeconds;
+        _maxDist = maxAllowedDistanceFromRoute;
+    }
+
     public void AddRoute(Route route)
     {
         _routes[route.Id] = route;
         foreach (var cp in route.Checkpoints)
             _features[cp.Id] = cp;
     }
-    public Feature GetClosestFeature(Position position)
-    {
-        if (_features.Count == 0) return null;
 
-        Feature closestFeature = null;
-        double minDistance = double.MaxValue;
+    public Feature? GetClosestFeature(Position position)
+    {
+        Feature? closest = null;
+        double minDist = double.MaxValue;
 
         foreach (var feature in _features.Values)
         {
-            double distance = feature.DistanceFrom(position);
-
-            if (distance < minDistance)
+            double dist = feature.DistanceFrom(position);
+            if (dist < minDist)
             {
-                minDistance = distance;
-                closestFeature = feature;
+                minDist = dist;
+                closest = feature;
             }
         }
-        return closestFeature;
-
+        return closest;
     }
+
     public PlayerRoute? AddPlayerRoute(PlayerRoute pr)
     {
         if (!_playerRoutes.TryAdd((pr.Username, pr.Route.Id), pr)) return null;
@@ -64,23 +63,24 @@ public class RouteService
 
     public void RemovePlayerRoute(PlayerRoute pr)
     {
-        if (_playerRoutes.Remove((pr.Username, pr.Route.Id)))
+        if (_playerRoutes.TryRemove((pr.Username, pr.Route.Id), out _))
             OnPlayerRouteDisposed?.Invoke(this, new PlayerRouteDisposedEventArgs(pr));
     }
 
     public void DetectCheckpoint(PlayerPosition pos, Feature? closest, PlayerRoute pr)
     {
-        var prCheckpoints = pr.Route.Checkpoints.Where(f => f.IsInvisible != true).ToList();
-        if (closest == null || !closest.IsInRange(pos.ActualPosition, _rangeThreshold)) return;
-        if (closest.IsInvisible == true)
+        if (closest == null || closest.IsInvisible == true || !closest.IsInRange(pos.ActualPosition, _rangeThreshold))
             return;
+
+        var prCheckpoints = pr.Route.Checkpoints;
         int idx = prCheckpoints.FindIndex(f => f.Id == closest.Id);
-        if (idx == -1 || (pr.Route.IsRailway && !pos.IsInMinecart)) return;
+        if (idx == -1 || (pr.Route.IsRailway && !pos.IsInMinecart))
+            return;
 
         var (oldCurrent, oldHeading) = (pr.CurrentFeature, pr.HeadingTo);
-
         bool inLoc = closest.IsLocationInFeature(pos.ActualPosition);
-        bool appr = closest.IsApproaching(pos), leav = closest.IsLeaving(pos);
+        bool appr = closest.IsApproaching(pos);
+        bool leav = closest.IsLeaving(pos);
 
         OnPlayerRouteUpdate?.Invoke(this, new PlayerRouteUpdateEventArgs(pr, inLoc, appr, leav));
 
@@ -90,16 +90,15 @@ public class RouteService
             else if (leav && pr.CurrentFeature?.Id == closest.Id) pr.CurrentFeature = null;
         }
 
-        var pts = prCheckpoints;
-        var next = idx + 1 < pts.Count ? pts[idx + 1] : null;
-        var prev = idx - 1 >= 0 ? pts[idx - 1] : null;
+        var next = idx + 1 < prCheckpoints.Count ? prCheckpoints[idx + 1] : null;
+        var prev = idx - 1 >= 0 ? prCheckpoints[idx - 1] : null;
 
         if (next?.IsHeadingTo(pos) == true) pr.HeadingTo = next;
         else if (prev?.IsHeadingTo(pos) == true) pr.HeadingTo = prev;
 
         if (pr.IsJustAdded)
         {
-            if (pr.HeadingTo != null && oldHeading?.Id != pr.HeadingTo?.Id)
+            if (pr.HeadingTo != null && oldHeading?.Id != pr.HeadingTo.Id)
                 OnHeadingChanged?.Invoke(this, new PlayerRouteHeadingChangedEventargs(pr, oldHeading));
             pr.IsJustAdded = false;
             return;
@@ -107,58 +106,63 @@ public class RouteService
 
         if (appr && oldCurrent?.Id != pr.CurrentFeature?.Id)
             OnApproach?.Invoke(this, new PlayerRouteFeatureApproachingEventArgs(pr, closest, inLoc));
+
         if (leav && pr.CurrentFeature == null && pr.LastLeftFeatureId != closest.Id)
         {
             pr.LastLeftFeatureId = closest.Id;
             OnLeave?.Invoke(this, new PlayerRouteFeatureLeavingEventArgs(pr, closest));
         }
+
         if (oldCurrent?.Id != pr.CurrentFeature?.Id)
             OnFeatureChanged?.Invoke(this, new PlayerRouteFeatureChangedEventArgs(pr, oldCurrent));
+
         if (oldHeading?.Id != pr.HeadingTo?.Id)
             OnHeadingChanged?.Invoke(this, new PlayerRouteHeadingChangedEventargs(pr, oldHeading));
     }
 
-    public void DetectActiveRoutes(PlayerPosition pos, Feature closest)
+    public void DetectActiveRoutes(PlayerPosition pos, Feature? closest)
     {
         var now = DateTime.Now;
         double? closestDist = closest?.DistanceFrom(pos.ActualPosition);
 
-        List<PlayerRoute> values = new List<PlayerRoute>();
-        lock (_playerRoutes)
+        foreach (var pr in _playerRoutes.Values)
         {
-            values = _playerRoutes.Values.ToList();
-        }
-        for (var i = 0; i < values.Count; i++)
-        {
-            var pr = values[i];
-            if (pr == null)
-                continue;
             if (pr.Username != pos.Username) continue;
-            double dist = pr.CurrentFeature?.DistanceFrom(pos.ActualPosition) ?? pr.HeadingTo?.DistanceFrom(pos.ActualPosition) ?? closestDist ?? double.MaxValue;
+
+            double dist = pr.CurrentFeature?.DistanceFrom(pos.ActualPosition)
+                       ?? pr.HeadingTo?.DistanceFrom(pos.ActualPosition)
+                       ?? closestDist
+                       ?? double.MaxValue;
 
             if (dist > _maxDist || (pr.Route.IsRailway && !pos.IsInMinecart && pr.CurrentFeature == null))
             {
                 pr.OffRouteSince ??= now;
-
                 int effectiveGrace = (pr.Route.IsRailway && pos.IsInMinecart) ? _graceSec * 4 : _graceSec;
 
-                if ((now - pr.OffRouteSince.Value).TotalSeconds >= effectiveGrace) RemovePlayerRoute(pr);
+                if ((now - pr.OffRouteSince.Value).TotalSeconds >= effectiveGrace)
+                    RemovePlayerRoute(pr);
             }
-            else pr.OffRouteSince = null;
+            else
+            {
+                pr.OffRouteSince = null;
+            }
         }
 
-        if (closest == null || (closestDist ?? double.MaxValue) > _maxDist) return;
+        if (closest == null || (closestDist ?? double.MaxValue) > _maxDist)
+            return;
 
         foreach (var r in _routes.Values)
         {
             if (r.IsRailway && !pos.IsInMinecart) continue;
-            if (!r.Checkpoints.Any(c => c.Id == closest.Id)) continue;
+            if (!r.Checkpoints.Exists(c => c.Id == closest.Id)) continue;
 
-            if (!_playerRoutes.TryGetValue((pos.Username, r.Id), out var pr))
+            var pr = _playerRoutes.GetOrAdd((pos.Username, r.Id), _ =>
             {
-                pr = new PlayerRoute { Username = pos.Username, Route = r, IsJustAdded = true };
-                AddPlayerRoute(pr);
-            }
+                var newPr = new PlayerRoute { Username = pos.Username, Route = r, IsJustAdded = true };
+                OnPlayerRouteAdded?.Invoke(this, new PlayerRouteAddedEventArgs(newPr));
+                return newPr;
+            });
+
             pr.Position = pos;
             DetectCheckpoint(pos, closest, pr);
         }
