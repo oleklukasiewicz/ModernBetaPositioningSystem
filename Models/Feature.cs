@@ -18,7 +18,7 @@ public class Feature
     public Position StartPosition { get => _start; set { _start = value; Recalc(); } }
     public Position EndPosition { get => _end; set { _end = value; Recalc(); } }
 
-    public List<Tag> Tags { get; set; } = new List<Tag>();
+    public List<Tag>? Tags { get; set; } = new List<Tag>();
     public bool? IsInvisible { get; set; } = false;
     private void Recalc()
     {

@@ -1,6 +1,8 @@
-﻿using System.Collections.Concurrent;
-using ModernBetaPositioningSystem.Events;
+﻿using ModernBetaPositioningSystem.Events;
 using ModernBetaPositioningSystem.Models;
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using static System.Collections.Specialized.BitVector32;
 using Route = ModernBetaPositioningSystem.Models.Route;
 
 namespace ModernBetaPositioningSystem.Services;
@@ -23,9 +25,9 @@ public class RouteService
     public event EventHandler<PlayerRouteDisposedEventArgs>? OnPlayerRouteDisposed;
     public event EventHandler<PlayerRouteUpdateEventArgs>? OnPlayerRouteUpdate;
 
-    public RouteService(Position? rangeThreshold = null, int gracePeriodSeconds = 12, double maxAllowedDistanceFromRoute = 32.0)
+    public RouteService(Position? rangeThreshold = null, int gracePeriodSeconds = 4, double maxAllowedDistanceFromRoute = 32.0)
     {
-        _rangeThreshold = rangeThreshold ?? new Position(32, 0, 32);
+        _rangeThreshold = rangeThreshold ?? new Position(24, 0, 24);
         _graceSec = gracePeriodSeconds;
         _maxDist = maxAllowedDistanceFromRoute;
     }
@@ -125,22 +127,24 @@ public class RouteService
         var now = DateTime.Now;
         double? closestDist = closest?.DistanceFrom(pos.ActualPosition);
 
-        foreach (var pr in _playerRoutes.Values)
+        foreach (var pr in _playerRoutes.Values.ToList())
         {
             if (pr.Username != pos.Username) continue;
 
-            double dist = pr.CurrentFeature?.DistanceFrom(pos.ActualPosition)
-                       ?? pr.HeadingTo?.DistanceFrom(pos.ActualPosition)
-                       ?? closestDist
-                       ?? double.MaxValue;
+            double dist = GetDistanceToRoute(pos, pr.Route);
+            bool isOffRoute = dist > _maxDist || (pr.Route.IsRailway && !pos.IsInMinecart && pr.CurrentFeature == null);
 
-            if (dist > _maxDist || (pr.Route.IsRailway && !pos.IsInMinecart && pr.CurrentFeature == null))
+            if (isOffRoute)
             {
                 pr.OffRouteSince ??= now;
-                int effectiveGrace = (pr.Route.IsRailway && pos.IsInMinecart) ? _graceSec * 4 : _graceSec;
 
-                if ((now - pr.OffRouteSince.Value).TotalSeconds >= effectiveGrace)
+                int effectiveGrace = (pr.Route.IsRailway && pos.IsInMinecart) ? _graceSec * 4 : _graceSec;
+                double offRouteDuration = (now - pr.OffRouteSince.Value).TotalSeconds;
+
+                if (offRouteDuration >= effectiveGrace)
+                {
                     RemovePlayerRoute(pr);
+                }
             }
             else
             {
@@ -166,5 +170,53 @@ public class RouteService
             pr.Position = pos;
             DetectCheckpoint(pos, closest, pr);
         }
+    }
+
+    private double GetDistanceToRoute(PlayerPosition pos, Route route)
+    {
+        var features = route?.Checkpoints;
+        if (features == null || features.Count == 0 || pos?.ActualPosition == null)
+            return double.MaxValue;
+
+        if (features.Count == 1)
+            return features[0].DistanceFrom(pos.ActualPosition);
+
+        double minDistance = double.MaxValue;
+
+        for (int i = 0; i < features.Count - 1; i++)
+        {
+            double dist = DistanceToSegment(pos.ActualPosition, features[i], features[i + 1]);
+            if (dist < minDistance) minDistance = dist;
+        }
+
+        return minDistance;
+    }
+
+    private double DistanceToSegment(Position p, Feature f1, Feature f2)
+    {
+        double ax = f1.CenterX, ay = f1.CenterY, az = f1.CenterZ;
+        double bx = f2.CenterX, by = f2.CenterY, bz = f2.CenterZ;
+
+        double abx = bx - ax, aby = by - ay, abz = bz - az;
+        double apx = p.X - ax, apy = p.Y - ay, apz = p.Z - az;
+        double abLenSq = abx * abx + aby * aby + abz * abz;
+
+        if (abLenSq == 0)
+            return f1.DistanceFrom(p);
+
+        double t = Math.Clamp((apx * abx + apy * aby + apz * abz) / abLenSq, 0.0, 1.0);
+
+        Position projPoint = new()
+        {
+            X = (long)(ax + t * abx),
+            Y = (long)(ay + t * aby),
+            Z = (long)(az + t * abz)
+        };
+
+        double dx = p.X - projPoint.X;
+        double dy = p.Y - projPoint.Y;
+        double dz = p.Z - projPoint.Z;
+
+        return Math.Sqrt(dx * dx + dy * dy + dz * dz);
     }
 }
