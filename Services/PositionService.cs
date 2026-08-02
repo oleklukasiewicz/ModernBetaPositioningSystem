@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net.Http.Json;
 using ModernBetaPositioningSystem.Events;
 using ModernBetaPositioningSystem.Models;
@@ -86,7 +87,14 @@ public class PositionService
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(intervalInSeconds));
         while (!ct.IsCancellationRequested && await timer.WaitForNextTickAsync(ct))
         {
-            await Track();
+            try
+            {
+                await Track();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error in tracking loop: {ex.Message}");
+            }
         }
     }
 }

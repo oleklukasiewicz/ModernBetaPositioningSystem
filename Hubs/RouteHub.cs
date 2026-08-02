@@ -11,8 +11,6 @@ public class RouteHub : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, username.Trim());
         }
     }
-
-    // Opcjonalnie: opuszczenie śledzenia
     public async Task UntrackUser(string username)
     {
         if (!string.IsNullOrWhiteSpace(username))
