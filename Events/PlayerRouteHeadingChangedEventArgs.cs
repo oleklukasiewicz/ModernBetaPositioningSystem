@@ -1,17 +1,5 @@
 ﻿using ModernBetaPositioningSystem.Models;
 
-namespace ModernBetaPositioningSystem.Events
-{
-    public class PlayerRouteHeadingChangedEventargs : EventArgs
-    {
-        public PlayerRoute PlayerRoute { get; private set; }
-        public Feature PreviousHeading { get; private set; }
+namespace ModernBetaPositioningSystem.Events;
 
-        public PlayerRouteHeadingChangedEventargs(PlayerRoute playerRoute, Feature previousHeading)
-        {
-            PlayerRoute = playerRoute;
-            PreviousHeading = previousHeading;
-        }
-
-    }
-}
+public record PlayerRouteHeadingChangedEventargs(PlayerRoute PlayerRoute, Feature? PreviousHeading);

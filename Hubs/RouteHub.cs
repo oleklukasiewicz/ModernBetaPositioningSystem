@@ -4,18 +4,36 @@ namespace ModernBetaPositioningSystem.Hubs;
 
 public class RouteHub : Hub
 {
-    public async Task TrackUser(string username)
+    public Task TrackUser(string username)
     {
-        if (!string.IsNullOrWhiteSpace(username))
-        {
-            await Groups.AddToGroupAsync(Context.ConnectionId, username.Trim());
-        }
+        return SetGroupAsync(username, addToGroup: true);
     }
-    public async Task UntrackUser(string username)
+
+    public Task UntrackUser(string username)
     {
-        if (!string.IsNullOrWhiteSpace(username))
+        return SetGroupAsync(username, addToGroup: false);
+    }
+
+    private async Task SetGroupAsync(string username, bool addToGroup)
+    {
+        var normalizedUsername = NormalizeUsername(username);
+        if (string.IsNullOrEmpty(normalizedUsername))
+            return;
+
+        if (addToGroup)
         {
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, username.Trim());
+            await Groups.AddToGroupAsync(Context.ConnectionId, normalizedUsername);
+            return;
         }
+
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, normalizedUsername);
+    }
+
+    private static string? NormalizeUsername(string? username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            return null;
+
+        return username.Trim();
     }
 }
