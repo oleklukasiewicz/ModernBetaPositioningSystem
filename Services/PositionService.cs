@@ -27,9 +27,18 @@ public class PositionService
         _converter = converter ?? DeserializeWorldPositions;
     }
 
-    private static WorldPositions DeserializeWorldPositions(string payload) =>
-        System.Text.Json.JsonSerializer.Deserialize<WorldPositions>(payload) ??
-        new WorldPositions { World = string.Empty, Players = new List<Position>() };
+    private static WorldPositions DeserializeWorldPositions(string payload)
+    {
+        var deserialized = System.Text.Json.JsonSerializer.Deserialize<WorldPositions>(payload, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+
+        if (deserialized == null)
+            throw new InvalidOperationException("Failed to deserialize WorldPositions from payload.");
+
+        return deserialized;
+    }
 
     public async Task<List<PlayerPosition>> Track()
     {
@@ -86,7 +95,7 @@ public class PositionService
         }
     }
 
-    public async Task StartTrackingLoop(CancellationToken ct, int milliseconds = 1001)
+    public async Task StartTrackingLoop(CancellationToken ct, int milliseconds = 1010)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(milliseconds));
         while (!ct.IsCancellationRequested && await timer.WaitForNextTickAsync(ct))
