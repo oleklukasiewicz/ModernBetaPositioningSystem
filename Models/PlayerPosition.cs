@@ -1,80 +1,73 @@
-﻿namespace ModernBetaPositioningSystem.Models
+﻿namespace ModernBetaPositioningSystem.Models;
+
+public class PlayerPosition
 {
-    public class PlayerPosition
+    public string Username { get; private set; } = string.Empty;
+    public Position ActualPosition { get; private set; } = Position.Zero;
+    public Position PreviousPosition { get; private set; } = Position.Zero;
+
+    public bool IsInMinecart => Speed > 6;
+
+    public float Distance
     {
-        public string Username { get; private set; }
-        public Position ActualPosition { get; private set; }
-        public Position PreviousPosition { get; private set; }
+        get
+        {
+            if (ActualPosition == null || PreviousPosition == null)
+                return 0;
 
-        public bool IsTracked
-        {
-            get; private set;
+            var movementVector = MovementVector;
+            return (float)Math.Sqrt(movementVector.X * movementVector.X + movementVector.Y * movementVector.Y + movementVector.Z * movementVector.Z);
         }
-        public bool IsInMinecart => Speed > 6;
-        public float Distance
+    }
+
+    public float Speed
+    {
+        get
         {
-            get
+            var seconds = (ActualPosition?.Time - PreviousPosition?.Time)?.TotalSeconds ?? 0;
+            return seconds > 0 ? Distance / (float)seconds : 0f;
+        }
+    }
+
+    public Position MovementVector
+    {
+        get
+        {
+            if (ActualPosition == null || PreviousPosition == null)
+                return Position.Zero;
+
+            return new Position
             {
-                if (ActualPosition == null || PreviousPosition == null)
-                    return 0;
+                X = ActualPosition.X - PreviousPosition.X,
+                Y = ActualPosition.Y - PreviousPosition.Y,
+                Z = ActualPosition.Z - PreviousPosition.Z
+            };
+        }
+    }
 
-                var movementVector = MovementVector;
-                return (float)Math.Sqrt(movementVector.X * movementVector.X + movementVector.Y * movementVector.Y + movementVector.Z * movementVector.Z);
-            }
-        }
-        public float Speed
-        {
-            get
-            {
-                var seconds = (ActualPosition?.Time - PreviousPosition?.Time)?.TotalSeconds ?? 0;
-                return seconds > 0 ? Distance / (float)seconds : 0f;
-            }
-        }
-        public Position MovementVector
-        {
-            get
-            {
-                if (ActualPosition == null || PreviousPosition == null)
-                {
-                    return new Position { X = 0, Y = 0, Z = 0 };
-                }
-                return new Position
-                {
-                    X = ActualPosition.X - PreviousPosition.X,
-                    Y = ActualPosition.Y - PreviousPosition.Y,
-                    Z = ActualPosition.Z - PreviousPosition.Z
-                };
-            }
-        }
-        public PlayerPosition(string username, Position position)
-        {
-            Username = username;
+    public PlayerPosition(string username, Position position)
+    {
+        Username = username;
+        UpdatePosition(position);
+    }
 
-            UpdatePosition(position);
-        }
-        public PlayerPosition UpdatePosition(Position newPosition)
-        {
-            PreviousPosition = ActualPosition;
-            ActualPosition = newPosition;
+    public PlayerPosition UpdatePosition(Position newPosition)
+    {
+        PreviousPosition = ActualPosition;
+        ActualPosition = newPosition;
 
-            if (ActualPosition.Time == null)
-                ActualPosition.Time = DateTime.Now;
+        if (ActualPosition.Time == null)
+            ActualPosition.Time = DateTime.Now;
 
-            IsTracked = true;
-            return this;
-        }
-        public void UnTrack()
-        {
-            IsTracked = false;
-        }
-        public override string ToString()
-        {
-            return @$"Username: {Username},
+        return this;
+    }
+
+    public override string ToString()
+    {
+        return @$"Username: {Username},
                       Position: ({ActualPosition.X}, {ActualPosition.Y}, {ActualPosition.Z}), 
                       Distance: {Distance}, Speed: {Speed}, 
                       Movement Vector: ({MovementVector.X}, {MovementVector.Y}, {MovementVector.Z})
-                      Tracking: {IsTracked}
                       InMinecart: {IsInMinecart}";
-        }
     }
 }

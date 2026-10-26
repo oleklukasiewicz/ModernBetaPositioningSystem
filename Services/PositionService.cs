@@ -1,8 +1,6 @@
-﻿using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Net.Http.Json;
-using ModernBetaPositioningSystem.Events;
+﻿using ModernBetaPositioningSystem.Events;
 using ModernBetaPositioningSystem.Models;
+using System.Collections.Concurrent;
 
 namespace ModernBetaPositioningSystem.Services;
 
@@ -11,19 +9,27 @@ public class PositionService
     private readonly string _endpointUrl;
     private readonly HttpClient _httpClient;
     private readonly ConcurrentDictionary<string, PlayerPosition> _trackedPlayers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Func<string, WorldPositions>? _converter;
 
     public event EventHandler<PlayerPositionsFetchedEventArgs>? OnPositionsFetched;
     public event EventHandler<PlayerPositionUpdatedEventArgs>? OnPlayerPositionUpdated;
     public event EventHandler<PlayerPositionAddedEventArgs>? OnPlayerPositionAdded;
     public event EventHandler<PlayerPositionDisposedEventArgs>? OnPlayerPositionDisposed;
 
-    public PositionService(string endpointUrl, string apiKey, HttpClient? httpClient = null)
+    public PositionService(string endpointUrl, string apiKey, HttpClient? httpClient = null, Func<string, WorldPositions>? converter = null)
     {
         _endpointUrl = endpointUrl;
         _httpClient = httpClient ?? new HttpClient();
+
         if (!_httpClient.DefaultRequestHeaders.Contains("X-API-Key"))
             _httpClient.DefaultRequestHeaders.Add("X-API-Key", apiKey);
+
+        _converter = converter ?? DeserializeWorldPositions;
     }
+
+    private static WorldPositions DeserializeWorldPositions(string payload) =>
+        System.Text.Json.JsonSerializer.Deserialize<WorldPositions>(payload) ??
+        new WorldPositions { World = string.Empty, Players = new List<Position>() };
 
     public async Task<List<PlayerPosition>> Track()
     {
@@ -58,10 +64,7 @@ public class PositionService
         foreach (var key in _trackedPlayers.Keys)
         {
             if (!activeUsernames.Contains(key) && _trackedPlayers.TryRemove(key, out var removed))
-            {
-                removed.UnTrack();
                 OnPlayerPositionDisposed?.Invoke(this, new PlayerPositionDisposedEventArgs(removed));
-            }
         }
 
         var resultList = _trackedPlayers.Values.ToList();
@@ -73,7 +76,8 @@ public class PositionService
     {
         try
         {
-            return await _httpClient.GetFromJsonAsync<WorldPositions>(_endpointUrl);
+            var stringResponse = await _httpClient.GetStringAsync(_endpointUrl);
+            return _converter(stringResponse);
         }
         catch (Exception ex)
         {
@@ -82,9 +86,9 @@ public class PositionService
         }
     }
 
-    public async Task StartTrackingLoop(CancellationToken ct, int intervalInSeconds = 1)
+    public async Task StartTrackingLoop(CancellationToken ct, int milliseconds = 1001)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(intervalInSeconds));
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(milliseconds));
         while (!ct.IsCancellationRequested && await timer.WaitForNextTickAsync(ct))
         {
             try
@@ -93,7 +97,7 @@ public class PositionService
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error in tracking loop: {ex.Message}");
+                Console.Error.WriteLine($"Error in tracking loop: {ex.Message}");
             }
         }
     }

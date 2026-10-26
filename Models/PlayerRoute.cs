@@ -1,15 +1,14 @@
-﻿namespace ModernBetaPositioningSystem.Models
-{
-    public class PlayerRoute
-    {
-        public string Username { get; set; }
-        public Route Route { get; set; }
-        public PlayerPosition Position { get; set; }
-        public Feature CurrentFeature { get; set; }
-        public Feature HeadingTo { get; set; }
+﻿namespace ModernBetaPositioningSystem.Models;
 
-        public DateTime? OffRouteSince { get; set; }
-        public bool IsJustAdded { get; set; } = false;
-        public Guid? LastLeftFeatureId { get; set; }
-    }
+public class PlayerRoute
+{
+    public string Username { get; set; } = string.Empty;
+    public Route Route { get; set; } = null!;
+    public PlayerPosition Position { get; set; } = null!;
+    public Feature CurrentFeature { get; set; } = null!;
+    public Feature HeadingTo { get; set; } = null!;
+
+    public DateTime? OffRouteSince { get; set; }
+    public bool IsJustAdded { get; set; }
+    public Guid? LastLeftFeatureId { get; set; }
 }
