@@ -1,9 +1,22 @@
 ﻿using Microsoft.AspNetCore.SignalR;
+using ModernBetaPositioningSystem.Services;
 
 namespace ModernBetaPositioningSystem.Hubs;
 
 public class RouteHub : Hub
 {
+    private readonly PositionService _positionService;
+
+    public RouteHub(PositionService positionService)
+    {
+        _positionService = positionService;
+    }
+
+    public bool Hello(string username)
+    {
+        return _positionService.IsTracked(username);
+    }
+
     public Task TrackUser(string username)
     {
         return SetGroupAsync(username, addToGroup: true);

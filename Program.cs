@@ -8,14 +8,15 @@ using Route = ModernBetaPositioningSystem.Models.Route;
 var builder = WebApplication.CreateBuilder(args);
 ConfigureServices(builder);
 
+var url = builder.Configuration.GetValue<string>("ApiUrl") ?? string.Empty;
+var apiKey = builder.Configuration.GetValue<string>("ApiKey") ?? string.Empty;
+var positionService = new PositionService(url, apiKey);
+builder.Services.AddSingleton(positionService);
+
 var app = builder.Build();
 ConfigureApplication(app);
 
 var routes = app.Configuration.GetSection("Routes").Get<List<Route>>() ?? new();
-var url = app.Configuration.GetValue<string>("ApiUrl") ?? string.Empty;
-var apiKey = app.Configuration.GetValue<string>("ApiKey") ?? string.Empty;
-
-var positionService = new PositionService(url, apiKey);
 var routeService = new RouteService();
 var hubContext = app.Services.GetRequiredService<IHubContext<RouteHub>>();
 
