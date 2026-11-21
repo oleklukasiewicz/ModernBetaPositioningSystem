@@ -61,14 +61,14 @@ public class RouteService
 
     public PlayerRoute? AddPlayerRoute(PlayerRoute pr)
     {
-        if (!_playerRoutes.TryAdd((pr.Username, pr.Route.Id), pr)) return null;
+        if (!_playerRoutes.TryAdd(GetPlayerRouteKey(pr.Username, pr.Route.Id), pr)) return null;
         OnPlayerRouteAdded?.Invoke(this, new PlayerRouteAddedEventArgs(pr));
         return pr;
     }
 
     public void RemovePlayerRoute(PlayerRoute pr)
     {
-        if (_playerRoutes.TryRemove((pr.Username, pr.Route.Id), out _))
+        if (_playerRoutes.TryRemove(GetPlayerRouteKey(pr.Username, pr.Route.Id), out _))
             OnPlayerRouteDisposed?.Invoke(this, new PlayerRouteDisposedEventArgs(pr));
     }
 
@@ -172,7 +172,7 @@ public class RouteService
             if (!route.Checkpoints.Exists(checkpoint => checkpoint.Id == closest.Id))
                 continue;
 
-            var playerRoute = _playerRoutes.GetOrAdd((pos.Username, route.Id), _ => CreatePlayerRoute(pos, route));
+            var playerRoute = _playerRoutes.GetOrAdd(GetPlayerRouteKey(pos.Username, route.Id), _ => CreatePlayerRoute(pos, route));
             playerRoute.Position = pos;
             DetectCheckpoint(pos, closest, playerRoute);
         }
@@ -184,7 +184,7 @@ public class RouteService
 
         foreach (var playerRoute in _playerRoutes.Values.ToList())
         {
-            if (playerRoute.Username != pos.Username)
+            if (!string.Equals(playerRoute.Username, pos.Username, StringComparison.OrdinalIgnoreCase))
                 continue;
 
             if (IsOnRoute(pos, playerRoute))
@@ -217,6 +217,11 @@ public class RouteService
         var newPlayerRoute = new PlayerRoute { Username = pos.Username, Route = route, IsJustAdded = true };
         OnPlayerRouteAdded?.Invoke(this, new PlayerRouteAddedEventArgs(newPlayerRoute));
         return newPlayerRoute;
+    }
+
+    private static (string Username, Guid RouteId) GetPlayerRouteKey(string username, Guid routeId)
+    {
+        return (PositionService.NormalizeUsername(username) ?? string.Empty, routeId);
     }
 
     private double GetDistanceToRoute(PlayerPosition pos, Route route)

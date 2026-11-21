@@ -42,11 +42,6 @@ public class RouteHub : Hub
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, normalizedUsername);
     }
 
-    private static string? NormalizeUsername(string? username)
-    {
-        if (string.IsNullOrWhiteSpace(username))
-            return null;
-
-        return username.Trim();
-    }
+    private static string? NormalizeUsername(string? username) =>
+        PositionService.NormalizeUsername(username);
 }

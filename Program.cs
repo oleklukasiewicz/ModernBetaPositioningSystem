@@ -70,7 +70,8 @@ static class RouteEventRegistrations
         {
             var closestFeature = routeService.GetClosestFeature(e.PlayerPosition.ActualPosition);
             routeService.DetectActiveRoutes(e.PlayerPosition, closestFeature);
-            await hubContext.Clients.Group(e.PlayerPosition.Username).SendAsync("OnPositionUpdate", e);
+            var groupName = PositionService.NormalizeUsername(e.PlayerPosition.Username) ?? string.Empty;
+            await hubContext.Clients.Group(groupName).SendAsync("OnPositionUpdate", e);
         };
 
         routeService.OnApproach += async (_, data) =>
@@ -79,7 +80,8 @@ static class RouteEventRegistrations
                 return;
 
             Debug.WriteLine($"{data.PlayerRoute.Username}> [THIS IS] {data.ApproachingFeature.Name}");
-            await hubContext.Clients.Group(data.PlayerRoute.Username).SendAsync("OnStation", data);
+            var groupName = PositionService.NormalizeUsername(data.PlayerRoute.Username) ?? string.Empty;
+            await hubContext.Clients.Group(groupName).SendAsync("OnStation", data);
         };
 
         routeService.OnLeave += async (_, data) =>
@@ -88,19 +90,22 @@ static class RouteEventRegistrations
                 return;
 
             Debug.WriteLine($"{data.PlayerRoute.Username}> [NEXT STATION IS] {data.PlayerRoute.HeadingTo.Name}");
-            await hubContext.Clients.Group(data.PlayerRoute.Username).SendAsync("OnNextStation", data);
+            var groupName = PositionService.NormalizeUsername(data.PlayerRoute.Username) ?? string.Empty;
+            await hubContext.Clients.Group(groupName).SendAsync("OnNextStation", data);
         };
 
         routeService.OnPlayerRouteAdded += async (_, data) =>
         {
             Debug.WriteLine($"[PLAYER ROUTE ADDED] {data.PlayerRoute.Username} added to route: {data.PlayerRoute.Route.Name}");
-            await hubContext.Clients.Group(data.PlayerRoute.Username).SendAsync("OnRouteJoin", data);
+            var groupName = PositionService.NormalizeUsername(data.PlayerRoute.Username) ?? string.Empty;
+            await hubContext.Clients.Group(groupName).SendAsync("OnRouteJoin", data);
         };
 
         routeService.OnPlayerRouteDisposed += async (_, data) =>
         {
             Debug.WriteLine($"[PLAYER ROUTE DISPOSED] {data.PlayerRoute.Username} removed from route: {data.PlayerRoute.Route.Name}");
-            await hubContext.Clients.Group(data.PlayerRoute.Username).SendAsync("OnRouteLeave", data);
+            var groupName = PositionService.NormalizeUsername(data.PlayerRoute.Username) ?? string.Empty;
+            await hubContext.Clients.Group(groupName).SendAsync("OnRouteLeave", data);
         };
     }
 }

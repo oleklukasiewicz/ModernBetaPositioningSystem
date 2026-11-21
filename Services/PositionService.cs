@@ -83,7 +83,16 @@ public class PositionService
 
     public bool IsTracked(string username)
     {
-        return !string.IsNullOrWhiteSpace(username) && _trackedPlayers.ContainsKey(username.Trim());
+        var normalizedUsername = NormalizeUsername(username);
+        return normalizedUsername != null && _trackedPlayers.ContainsKey(normalizedUsername);
+    }
+
+    public static string? NormalizeUsername(string? username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            return null;
+
+        return username.Trim().ToUpperInvariant();
     }
 
     private async Task<WorldPositions?> FetchPositionsAsync()
