@@ -71,7 +71,27 @@ public class RouteService
         if (_playerRoutes.TryRemove(GetPlayerRouteKey(pr.Username, pr.Route.Id), out _))
             OnPlayerRouteDisposed?.Invoke(this, new PlayerRouteDisposedEventArgs(pr));
     }
-
+    public Route FindRouteById(Guid routeId) => _routes.TryGetValue(routeId, out var route) ? route : null!;
+    public Feature AddRoutesFromTransfers(Feature feature)
+    {
+        if (feature.TransfersId == null || feature.TransfersId.Count == 0)
+            return feature;
+        foreach (var transferId in feature.TransfersId)
+        {
+            var route = FindRouteById(transferId);
+            var routeCopy = route != null ? new Route
+            {
+                Id = route.Id,
+                Name = route.Name,
+                IsRailway = route.IsRailway,
+                Tags = route.Tags
+            } : null;
+            var isExistingTransfer = feature.Transfers?.Any(t => t.Id == transferId) ?? false;
+            if (route != null && !isExistingTransfer)
+                feature.Transfers!.Add(routeCopy);
+        }
+        return feature;
+    }
     public void DetectCheckpoint(PlayerPosition pos, Feature? closest, PlayerRoute pr)
     {
         if (!CanProcessCheckpoint(pos, closest))
@@ -88,6 +108,8 @@ public class RouteService
         bool isInside = closest.IsLocationInFeature(pos.ActualPosition);
         bool isApproaching = closest.IsApproaching(pos);
         bool isLeaving = closest.IsLeaving(pos);
+        //add routes to transfers
+        AddRoutesFromTransfers(closest);
 
         OnPlayerRouteUpdate?.Invoke(this, new PlayerRouteUpdateEventArgs(pr, isApproaching, isLeaving, isInside));
         UpdateCurrentFeature(pr, closest, isInside, isLeaving);

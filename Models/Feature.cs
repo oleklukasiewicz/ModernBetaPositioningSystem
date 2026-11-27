@@ -23,9 +23,9 @@ public class Feature
     public Position EndPosition { get => _end; set { _end = value; Recalc(); } }
 
     public List<Tag>? Tags { get; set; } = new();
+    public List<Guid>? TransfersId { get; set; } = new();
+    public List<Route>? Transfers { get; set; } = new();
     public bool? IsInvisible { get; set; }
-
-    public Position CenterPosition => new() { X = (long)CenterX, Y = (long)CenterY, Z = (long)CenterZ };
 
     private void Recalc()
     {

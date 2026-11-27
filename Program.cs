@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using ModernBetaPositioningSystem.Hubs;
 using ModernBetaPositioningSystem.Models;
+using ModernBetaPositioningSystem.ResponseModels;
 using ModernBetaPositioningSystem.Services;
 using System.Diagnostics;
 using Route = ModernBetaPositioningSystem.Models.Route;
@@ -81,7 +82,14 @@ static class RouteEventRegistrations
 
             Debug.WriteLine($"{data.PlayerRoute.Username}> [THIS IS] {data.ApproachingFeature.Name}");
             var groupName = PositionService.NormalizeUsername(data.PlayerRoute.Username) ?? string.Empty;
-            await hubContext.Clients.Group(groupName).SendAsync("OnStation", data);
+            var response = new
+            {
+                PlayerRoute = new PlayerRouteResponseModel(data.PlayerRoute),
+                ApproachingFeature = new FeatureResponseModel(data.ApproachingFeature),
+                IsInsideApproachingFeature = data.IsInsideApproachingFeature
+            };
+            await hubContext.Clients.Group(groupName).SendAsync("OnStation", response);
+            var jsonResponse = System.Text.Json.JsonSerializer.Serialize(response); 
         };
 
         routeService.OnLeave += async (_, data) =>
@@ -91,21 +99,29 @@ static class RouteEventRegistrations
 
             Debug.WriteLine($"{data.PlayerRoute.Username}> [NEXT STATION IS] {data.PlayerRoute.HeadingTo.Name}");
             var groupName = PositionService.NormalizeUsername(data.PlayerRoute.Username) ?? string.Empty;
-            await hubContext.Clients.Group(groupName).SendAsync("OnNextStation", data);
+            var response = new
+            {
+                PlayerRoute = new PlayerRouteResponseModel(data.PlayerRoute),
+                NextStation = new FeatureResponseModel(data.PlayerRoute.HeadingTo)
+            };
+            await hubContext.Clients.Group(groupName).SendAsync("OnNextStation", response);
+            var jsonResponse = System.Text.Json.JsonSerializer.Serialize(response);
         };
 
         routeService.OnPlayerRouteAdded += async (_, data) =>
         {
             Debug.WriteLine($"[PLAYER ROUTE ADDED] {data.PlayerRoute.Username} added to route: {data.PlayerRoute.Route.Name}");
             var groupName = PositionService.NormalizeUsername(data.PlayerRoute.Username) ?? string.Empty;
-            await hubContext.Clients.Group(groupName).SendAsync("OnRouteJoin", data);
+            var response = new PlayerRouteResponseModel(data.PlayerRoute);
+            await hubContext.Clients.Group(groupName).SendAsync("OnRouteJoin", response);
         };
 
         routeService.OnPlayerRouteDisposed += async (_, data) =>
         {
             Debug.WriteLine($"[PLAYER ROUTE DISPOSED] {data.PlayerRoute.Username} removed from route: {data.PlayerRoute.Route.Name}");
             var groupName = PositionService.NormalizeUsername(data.PlayerRoute.Username) ?? string.Empty;
-            await hubContext.Clients.Group(groupName).SendAsync("OnRouteLeave", data);
+            var response = new PlayerRouteResponseModel(data.PlayerRoute);
+            await hubContext.Clients.Group(groupName).SendAsync("OnRouteLeave", response);
         };
     }
 }
